@@ -2,3 +2,8 @@ node_modules/
 dist/
 *.log
 .DS_Store
+# PWA icon PNGs are generated from scripts/icons.base64.json on install
+public/icons/*.png
+
+# Binary wrapper jar cannot be pushed via text-only APIs; regenerate with `gradle wrapper`
+android/gradle/wrapper/gradle-wrapper.jar
