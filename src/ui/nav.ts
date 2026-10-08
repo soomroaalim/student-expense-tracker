@@ -10,9 +10,18 @@ export type Route =
   | 'goals'
   | 'recurring'
   | 'settings'
-  | 'categories';
+  | 'categories'
+  | 'debt'
+  | 'tools'
+  | 'calculator'
+  | 'money-tools'
+  | 'games'
+  | 'game-quiz'
+  | 'game-budget'
+  | 'game-math'
+  | 'game-saving';
 
-const VALID: Route[] = ['home', 'transactions', 'stats', 'profile', 'budgets', 'goals', 'recurring', 'settings', 'categories'];
+const VALID: Route[] = ['home', 'transactions', 'stats', 'profile', 'budgets', 'goals', 'recurring', 'settings', 'categories', 'debt', 'tools', 'calculator', 'money-tools', 'games', 'game-quiz', 'game-budget', 'game-math', 'game-saving'];
 
 export function currentRoute(): Route {
   const h = window.location.hash.replace(/^#\/?/, '');

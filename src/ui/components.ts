@@ -48,7 +48,9 @@ export function toast(message: string, kind: 'info' | 'success' | 'error' = 'inf
     toastRoot = el('div', { class: 'toast-root', role: 'status', 'aria-live': 'polite' });
     document.body.appendChild(toastRoot);
   }
-  const t = el('div', { class: `toast toast-${kind}` }, icon(kind === 'error' ? 'alert' : kind === 'success' ? 'check' : 'info'), el('span', {}, message));
+  const t = el('div', { class: `toast toast-${kind}` });
+  const ic = el('span', { class: 'toast-ic', html: icon(kind === 'error' ? 'alert' : kind === 'success' ? 'check' : 'info') });
+  t.append(ic, el('span', { class: 'toast-msg' }, message));
   toastRoot.appendChild(t);
   requestAnimationFrame(() => t.classList.add('show'));
   setTimeout(() => {
@@ -62,6 +64,22 @@ export function toast(message: string, kind: 'info' | 'success' | 'error' = 'inf
 export interface ModalHandle {
   close: () => void;
   root: HTMLElement;
+}
+
+/** Stack of currently open modals (topmost last). Used by Android back-button handling. */
+const modalStack: ModalHandle[] = [];
+
+/** True when at least one modal/dialog is open. */
+export function hasOpenModal(): boolean {
+  return modalStack.length > 0;
+}
+
+/** Close the topmost open modal, if any. Returns true when one was closed. */
+export function closeTopModal(): boolean {
+  const top = modalStack[modalStack.length - 1];
+  if (!top) return false;
+  top.close();
+  return true;
 }
 
 export function openModal(opts: {
@@ -104,11 +122,14 @@ export function openModal(opts: {
   const handle: ModalHandle = {
     root: overlay,
     close: () => {
+      const idx = modalStack.indexOf(handle);
+      if (idx >= 0) modalStack.splice(idx, 1);
       overlay.classList.remove('show');
       setTimeout(() => overlay.remove(), 200);
       document.removeEventListener('keydown', onKey);
     },
   };
+  modalStack.push(handle);
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && opts.dismissible !== false) handle.close();
   };
@@ -204,17 +225,28 @@ function hashStr(s: string): number {
   return h;
 }
 
-/** Segmented control (e.g. Expense | Income tabs). */
+/** Segmented control (e.g. Expense | Income tabs). Manages its own active state. */
 export function segmented<T extends string>(options: Array<{ value: T; label: string }>, current: T, onChange: (v: T) => void): HTMLElement {
   const wrap = el('div', { class: 'segmented', role: 'tablist' });
+  const buttons: HTMLButtonElement[] = [];
   for (const o of options) {
-    wrap.appendChild(el('button', {
+    const btn = el('button', {
       class: `seg-btn${o.value === current ? ' active' : ''}`,
       role: 'tab',
       'aria-selected': o.value === current ? 'true' : 'false',
       text: o.label,
-      onclick: () => onChange(o.value),
-    }));
+      type: 'button',
+      onclick: () => {
+        for (const b of buttons) {
+          const isActive = b === btn;
+          b.classList.toggle('active', isActive);
+          b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        }
+        onChange(o.value);
+      },
+    }) as HTMLButtonElement;
+    buttons.push(btn);
+    wrap.appendChild(btn);
   }
   return wrap;
 }
@@ -239,4 +271,24 @@ export function selectInput(options: Array<{ value: string; label: string }>, se
     s.appendChild(opt);
   }
   return s;
+}
+
+/**
+ * Shrink-to-fit for money amounts: reduces the font size of `.fit-amt`
+ * elements until the full amount fits on one line (never clipped with "...").
+ * Falls back to CSS word-breaking when layout info is unavailable (e.g. tests).
+ */
+export function fitAmounts(root: ParentNode, selector = '.fit-amt', minPx = 10): void {
+  const els = root.querySelectorAll(selector);
+  els.forEach((node) => {
+    const e = node as HTMLElement;
+    e.style.fontSize = '';
+    let size = parseFloat(getComputedStyle(e).fontSize);
+    if (!Number.isFinite(size) || size <= 0) return;
+    let guard = 40;
+    while (guard-- > 0 && size > minPx && e.scrollWidth > e.clientWidth + 1) {
+      size -= 1;
+      e.style.fontSize = `${size}px`;
+    }
+  });
 }

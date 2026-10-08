@@ -39,9 +39,15 @@ export function donutChart(segments: ChartSegment[], size = 170, centerLabel = '
     return el;
   }).join('');
 
+  // Center label must fit inside the donut hole (inner diameter ~118 units):
+  // shrink the font for long amounts instead of letting them spill over.
+  const labelFs = centerLabel
+    ? Math.max(9, Math.min(19, Math.floor(104 / (centerLabel.length * 0.58))))
+    : 19;
+
   return `<svg viewBox="0 0 ${size} ${size}" class="chart donut" role="img" aria-label="${esc(centerLabel)}">
     ${arcs}
-    <text x="${cx}" y="${cy - 8}" text-anchor="middle" class="donut-value">${esc(centerLabel)}</text>
+    <text x="${cx}" y="${cy - 8}" text-anchor="middle" class="donut-value" style="font-size:${labelFs}px">${esc(centerLabel)}</text>
     <text x="${cx}" y="${cy + 14}" text-anchor="middle" class="donut-sub">${esc(centerSub)}</text>
   </svg>`;
 }
@@ -55,13 +61,15 @@ export interface BarDatum {
 /** Vertical bar chart (e.g. daily spending). */
 export function barChart(data: BarDatum[], opts: { height?: number; color?: string; format?: (v: number) => string } = {}): string {
   const h = opts.height ?? 150;
-  const w = Math.max(280, data.length * 34);
+  // Keep the viewBox close to real phone widths (~24px per bar) so the SVG
+  // scales 1:1 and never forces horizontal scrolling.
+  const w = Math.max(280, Math.min(560, data.length * 24));
   const max = Math.max(...data.map((d) => d.value), 1);
   const padB = 26;
   const padT = 14;
   const innerH = h - padB - padT;
   const slot = w / Math.max(1, data.length);
-  const bw = Math.min(26, slot * 0.55);
+  const bw = Math.min(18, slot * 0.55);
 
   const bars = data.map((d, i) => {
     const bh = Math.max(2, (d.value / max) * innerH);
@@ -77,7 +85,7 @@ export function barChart(data: BarDatum[], opts: { height?: number; color?: stri
     </g>`;
   }).join('');
 
-  return `<div class="chart-scroll"><svg viewBox="0 0 ${w} ${h}" class="chart bars" role="img" style="min-width:${w}px">${bars}</svg></div>`;
+  return `<svg viewBox="0 0 ${w} ${h}" class="chart bars" role="img" style="width:100%;height:auto">${bars}</svg>`;
 }
 
 /** Area sparkline (e.g. spending over time). */

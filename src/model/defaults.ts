@@ -35,17 +35,23 @@ export interface CategorySeed {
   name: string;
   icon: string;
   kind: 'expense' | 'income' | 'both';
+  essential?: boolean;
 }
 
 export const DEFAULT_EXPENSE_CATEGORIES: CategorySeed[] = [
-  { id: 'cat-food', name: 'Food', icon: 'food', kind: 'expense' },
-  { id: 'cat-transport', name: 'Transport', icon: 'transport', kind: 'expense' },
-  { id: 'cat-education', name: 'Education', icon: 'education', kind: 'expense' },
-  { id: 'cat-mobile', name: 'Mobile/Internet', icon: 'mobile', kind: 'expense' },
-  { id: 'cat-shopping', name: 'Shopping', icon: 'shopping', kind: 'expense' },
+  { id: 'cat-food', name: 'Food', icon: 'food', kind: 'expense', essential: true },
+  { id: 'cat-transport', name: 'Transport', icon: 'transport', kind: 'expense', essential: true },
+  { id: 'cat-education', name: 'Education', icon: 'education', kind: 'expense', essential: true },
+  { id: 'cat-mobile', name: 'Mobile/Data', icon: 'mobile', kind: 'expense', essential: true },
+  { id: 'cat-snacks', name: 'Snacks', icon: 'snacks', kind: 'expense' },
   { id: 'cat-entertainment', name: 'Entertainment', icon: 'entertainment', kind: 'expense' },
-  { id: 'cat-bills', name: 'Bills', icon: 'bills', kind: 'expense' },
-  { id: 'cat-health', name: 'Health', icon: 'health', kind: 'expense' },
+  { id: 'cat-shopping', name: 'Shopping', icon: 'shopping', kind: 'expense' },
+  { id: 'cat-hostel', name: 'Hostel/Rent', icon: 'home', kind: 'expense', essential: true },
+  { id: 'cat-subscriptions', name: 'Subscriptions', icon: 'repeat', kind: 'expense' },
+  { id: 'cat-savings', name: 'Savings', icon: 'savings', kind: 'expense' },
+  { id: 'cat-bills', name: 'Bills', icon: 'bills', kind: 'expense', essential: true },
+  { id: 'cat-health', name: 'Health', icon: 'health', kind: 'expense', essential: true },
+  { id: 'cat-gifts', name: 'Gifts', icon: 'gift', kind: 'expense' },
   { id: 'cat-other', name: 'Other', icon: 'other', kind: 'expense' },
 ];
 
@@ -53,14 +59,15 @@ export const DEFAULT_INCOME_CATEGORIES: CategorySeed[] = [
   { id: 'cat-pocket', name: 'Pocket Money', icon: 'wallet', kind: 'income' },
   { id: 'cat-scholarship', name: 'Scholarship', icon: 'scholarship', kind: 'income' },
   { id: 'cat-parttime', name: 'Part-time Work', icon: 'briefcase', kind: 'income' },
+  { id: 'cat-freelance', name: 'Freelancing', icon: 'laptop', kind: 'income' },
   { id: 'cat-gift', name: 'Gift', icon: 'gift', kind: 'income' },
   { id: 'cat-income-other', name: 'Other Income', icon: 'income', kind: 'income' },
 ];
 
-/** Colors assigned to categories in charts (stable by index). */
+/** Colors assigned to categories in charts (stable by index). Red-brand v1.5 palette. */
 export const CATEGORY_COLORS = [
-  '#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444',
-  '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#64748b',
+  '#e11d48', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444',
+  '#f97316', '#ec4899', '#14b8a6', '#a3a3a3', '#64748b',
 ];
 
 export function seedCategories(now: number): Category[] {
