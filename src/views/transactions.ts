@@ -7,16 +7,18 @@
 import { clear, el, emptyState, moneyEl, categoryAvatar, segmented, selectInput, textInput } from '../ui/components';
 import { icon } from '../ui/icons';
 import { getSettings, store } from '../data/store';
-import { formatSigned } from '../core/money';
+import { formatMoney } from '../core/money';
 import { friendlyDate, isValidISODate } from '../core/dates';
-import { summarize } from '../core/finance';
+import { filterTransactions } from '../core/finance';
+import { netOf } from '../core/accounting';
 import { openAddSheet, openEditSheet } from './add';
-import type { Category, Transaction } from '../model/types';
+import type { Category, Transaction, TxnType } from '../model/types';
+import { txnSignedAmount, txnTypeLabel } from '../model/types';
 
 // ------------------------------------------------------------------ filter state (module-level; survives re-render)
 
 let q = '';
-let typeFilter: 'all' | 'expense' | 'income' = 'all';
+let typeFilter: 'all' | TxnType = 'all';
 let catFilter = '';
 let fromDate = '';
 let toDate = '';
@@ -28,34 +30,32 @@ const ROW_CAP = 500;
 export async function renderTransactions(root: HTMLElement): Promise<void> {
   clear(root);
 
-  const [txns, categories] = await Promise.all([
-    store.listTransactions(),
-    store.listCategories(),
-  ]);
-  const catMap = new Map<string, Category>(categories.map((c) => [c.id, c]));
+  const categories = await store.listCategories();
 
+  const summary = el('div');
   const list = el('div', { class: 'txn-list' });
   root.append(
     el('div', { class: 'page-head' },
       el('h1', { class: 'page-title', text: 'Transactions' }),
     ),
-    buildSummaryCard(txns),
-    buildToolbar(categories, list),
+    summary,
+    buildToolbar(categories, () => refresh(summary, list)),
     list,
   );
-  renderList(list, txns, catMap);
+  await refresh(summary, list);
 }
 
 // ------------------------------------------------------------------ summary
 
-function buildSummaryCard(txns: Transaction[]): HTMLElement {
-  const s = summarize(txns);
+function buildSummaryCard(filtered: Transaction[]): HTMLElement {
+  const net = netOf(filtered);
+  const count = filtered.length;
   const row = el('div', { class: 'row-between card summary-card' });
   row.append(
-    el('span', { class: 'txn-count', text: `${s.count} transaction${s.count === 1 ? '' : 's'}` }),
+    el('span', { class: 'txn-count', text: `${count} transaction${count === 1 ? '' : 's'}` }),
     el('span', { class: 'net-wrap' },
       el('span', { class: 'net-label', text: 'Net' }),
-      moneyEl(s.balance, s.balance >= 0 ? 'income' : 'expense'),
+      moneyEl(net, net >= 0 ? 'income' : 'expense'),
     ),
   );
   return row;
@@ -63,12 +63,12 @@ function buildSummaryCard(txns: Transaction[]): HTMLElement {
 
 // ------------------------------------------------------------------ toolbar
 
-function buildToolbar(categories: Category[], list: HTMLElement): HTMLElement {
+function buildToolbar(categories: Category[], onFilterChange: () => void): HTMLElement {
   const toolbar = el('div', { class: 'card filter-card' });
 
   // Search
   const searchInput = textInput({ placeholder: 'Search notes, categories…', 'aria-label': 'Search transactions', value: q });
-  searchInput.oninput = () => { q = searchInput.value; void refresh(list); };
+  searchInput.oninput = () => { q = searchInput.value; onFilterChange(); };
   const searchBar = el('div', { class: 'search-bar' },
     el('span', { class: 'search-ic', html: icon('search') }),
     searchInput,
@@ -76,14 +76,17 @@ function buildToolbar(categories: Category[], list: HTMLElement): HTMLElement {
   toolbar.appendChild(searchBar);
 
   // Type segmented
-  toolbar.appendChild(segmented<'all' | 'expense' | 'income'>(
+  toolbar.appendChild(segmented<'all' | TxnType>(
     [
       { value: 'all', label: 'All' },
       { value: 'expense', label: 'Expense' },
       { value: 'income', label: 'Income' },
+      { value: 'gift_received', label: 'Gift' },
+      { value: 'borrowed', label: 'Borrowed' },
+      { value: 'debt_repayment', label: 'Repaid' },
     ],
     typeFilter,
-    (v) => { typeFilter = v; void refresh(list); },
+    (v) => { typeFilter = v; onFilterChange(); },
   ));
 
   // Category select
@@ -92,7 +95,7 @@ function buildToolbar(categories: Category[], list: HTMLElement): HTMLElement {
     catFilter,
     { 'aria-label': 'Filter by category' },
   );
-  catSelect.onchange = () => { catFilter = catSelect.value; void refresh(list); };
+  catSelect.onchange = () => { catFilter = catSelect.value; onFilterChange(); };
   toolbar.appendChild(catSelect);
 
   // Date range
@@ -101,7 +104,7 @@ function buildToolbar(categories: Category[], list: HTMLElement): HTMLElement {
   fromInput.onchange = () => {
     if (fromInput.value === '' || isValidISODate(fromInput.value)) {
       fromDate = fromInput.value;
-      void refresh(list);
+      onFilterChange();
     } else {
       fromInput.value = fromDate;
     }
@@ -109,7 +112,7 @@ function buildToolbar(categories: Category[], list: HTMLElement): HTMLElement {
   toInput.onchange = () => {
     if (toInput.value === '' || isValidISODate(toInput.value)) {
       toDate = toInput.value;
-      void refresh(list);
+      onFilterChange();
     } else {
       toInput.value = toDate;
     }
@@ -126,12 +129,19 @@ function buildToolbar(categories: Category[], list: HTMLElement): HTMLElement {
     text: 'Clear filters',
     onclick: async () => {
       q = ''; typeFilter = 'all'; catFilter = ''; fromDate = ''; toDate = '';
-      await refresh(list);
       // Sync DOM inputs with reset state.
       searchInput.value = '';
       catSelect.value = '';
       fromInput.value = '';
       toInput.value = '';
+      // Reset segmented active state to "All".
+      const segBtns = toolbar.querySelectorAll('.seg-btn');
+      segBtns.forEach((b, i) => {
+        const isActive = i === 0;
+        b.classList.toggle('active', isActive);
+        b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      });
+      onFilterChange();
     },
   });
   toolbar.appendChild(el('div', { class: 'filter-clear' }, clearBtn));
@@ -139,40 +149,36 @@ function buildToolbar(categories: Category[], list: HTMLElement): HTMLElement {
   return toolbar;
 }
 
-/** Re-render only the list container with current filters. */
-async function refresh(list: HTMLElement | null): Promise<void> {
-  if (!list) return;
+/** Re-render summary + list with current filters. */
+async function refresh(summary: HTMLElement, list: HTMLElement): Promise<void> {
   const [txns, categories] = await Promise.all([
     store.listTransactions(),
     store.listCategories(),
   ]);
   const catMap = new Map<string, Category>(categories.map((c) => [c.id, c]));
-  renderList(list, txns, catMap);
+  const filtered = applyFilters(txns, catMap);
+  clear(summary);
+  summary.appendChild(buildSummaryCard(filtered));
+  renderList(list, filtered, catMap);
 }
 
 // ------------------------------------------------------------------ list
 
-function renderList(root: HTMLElement, txns: Transaction[], catMap: Map<string, Category>): void {
+function renderList(root: HTMLElement, filtered: Transaction[], catMap: Map<string, Category>): void {
   clear(root);
 
-  if (txns.length === 0) {
-    root.appendChild(emptyState({
+  if (filtered.length === 0) {
+    const hasActiveFilters = q !== '' || typeFilter !== 'all' || catFilter !== '' || fromDate !== '' || toDate !== '';
+    root.appendChild(emptyState(hasActiveFilters ? {
+      icon: 'search',
+      title: 'No matches',
+      subtitle: 'Try adjusting your search or filters.',
+    } : {
       icon: 'receipt',
       title: 'No transactions yet',
       subtitle: 'Every rupee you log shows up here.',
       actionLabel: 'Add your first transaction',
       onAction: () => openAddSheet('expense'),
-    }));
-    return;
-  }
-
-  const filtered = applyFilters(txns, catMap);
-
-  if (filtered.length === 0) {
-    root.appendChild(emptyState({
-      icon: 'search',
-      title: 'No matches',
-      subtitle: 'Try adjusting your search or filters.',
     }));
     return;
   }
@@ -197,32 +203,27 @@ function renderList(root: HTMLElement, txns: Transaction[], catMap: Map<string, 
   }
 }
 
-function applyFilters(txns: Transaction[], catMap: Map<string, Category>): Transaction[] {
-  const needle = q.trim().toLowerCase();
-  const from = fromDate !== '' && isValidISODate(fromDate) ? fromDate : null;
-  const to = toDate !== '' && isValidISODate(toDate) ? toDate : null;
+/** Reset module filter state (used by tests and navigation). */
+export function resetTxnFilters(): void {
+  q = ''; typeFilter = 'all'; catFilter = ''; fromDate = ''; toDate = '';
+}
 
-  const out = txns.filter((t) => {
-    if (typeFilter !== 'all' && t.type !== typeFilter) return false;
-    if (catFilter !== '' && t.categoryId !== catFilter) return false;
-    if (from && t.date < from) return false;
-    if (to && t.date > to) return false;
-    if (needle) {
-      const catName = catMap.get(t.categoryId)?.name ?? 'Unknown category';
-      const hay = [t.note ?? '', t.paymentMethod ?? '', catName].join(' ').toLowerCase();
-      if (!hay.includes(needle)) return false;
-    }
-    return true;
-  });
-  // Newest first; store.listTransactions already sorts, but keep this pure-safe.
-  out.sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
-  return out;
+function applyFilters(txns: Transaction[], catMap: Map<string, Category>): Transaction[] {
+  const categoryName = (id: string) => catMap.get(id)?.name ?? 'Unknown category';
+  return filterTransactions(txns, categoryName, { q, type: typeFilter, categoryId: catFilter, from: fromDate, to: toDate });
 }
 
 function txnRow(t: Transaction, catMap: Map<string, Category>, currency: string): HTMLElement {
   const cat = catMap.get(t.categoryId);
   const catName = cat?.name ?? 'Unknown category';
-  const sub = [t.note, t.paymentMethod, friendlyDate(t.date)].filter((x): x is string => !!x).join(' • ');
+  const title = t.type === 'borrowed' && t.lender
+    ? `Borrowed from ${t.lender}`
+    : t.type === 'opening_balance'
+      ? 'Starting balance'
+      : catName;
+  const sub = [txnTypeLabel(t.type), t.note, t.paymentMethod, friendlyDate(t.date)].filter((x): x is string => !!x).join(' • ');
+  const signed = txnSignedAmount(t.type, t.amount);
+  const amtCls = signed >= 0 ? 'income' : 'expense';
   const row = el('button', {
     class: 'txn-row',
     type: 'button',
@@ -230,13 +231,13 @@ function txnRow(t: Transaction, catMap: Map<string, Category>, currency: string)
   },
     categoryAvatar(cat),
     el('div', { class: 'txn-main' },
-      el('div', { class: 'txn-name', text: catName }),
+      el('div', { class: 'txn-name', text: title }),
       el('div', { class: 'txn-sub', text: sub }),
     ),
     el('div', { class: 'txn-right' },
       el('div', {
-        class: `txn-amt ${t.type === 'expense' ? 'expense' : 'income'}`,
-        text: formatSigned(t.type === 'expense' ? -t.amount : t.amount, currency),
+        class: `txn-amt ${amtCls}`,
+        text: formatMoney(signed, currency),
       }),
       el('div', { class: 'txn-date', text: friendlyDate(t.date) }),
     ),

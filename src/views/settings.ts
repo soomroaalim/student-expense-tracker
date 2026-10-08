@@ -2,13 +2,14 @@
  * Settings view: profile, currency, appearance, notifications,
  * data export/import, danger zone, and about.
  */
-import { todayISO } from '../core/dates';
+import { isValidISODate, todayISO } from '../core/dates';
 import {
   downloadFile, fromBackupJSON, toBackupJSON, transactionsFromCSV, transactionsToCSV,
 } from '../core/export';
+import { amountErrorMessage, formatMoney, parseAmount } from '../core/money';
 import { CURRENCIES } from '../model/defaults';
 import type { BackupData, ThemeMode } from '../model/types';
-import { getSettings, saveSettings, store } from '../data/store';
+import { getSettings, newId, saveSettings, store } from '../data/store';
 import { requestPermission, notificationsSupported } from '../services/notify';
 import { navigate, refreshTheme, type Route } from '../ui/nav';
 import { icon } from '../ui/icons';
@@ -66,6 +67,105 @@ export async function renderSettings(root: HTMLElement): Promise<void> {
     },
   );
   view.appendChild(sectionCard('Currency', field('Currency', currencySelect)));
+
+  // ------------------------------------------------------------- 2b. Allowance (optional)
+  const allowanceInput = textInput({
+    type: 'date',
+    value: settings.nextAllowanceDate ?? '',
+    'aria-label': 'Next allowance date',
+  });
+  const allowanceAmtInput = textInput({
+    placeholder: 'e.g. 5000',
+    inputmode: 'decimal',
+    value: settings.nextAllowanceAmount ? String(settings.nextAllowanceAmount / 100) : '',
+    'aria-label': 'Expected allowance amount',
+  });
+  const bufferInput = textInput({
+    placeholder: 'e.g. 1000',
+    inputmode: 'decimal',
+    value: settings.emergencyBuffer ? String(settings.emergencyBuffer / 100) : '',
+    'aria-label': 'Emergency buffer',
+  });
+  view.appendChild(sectionCard('Allowance & safety buffer',
+    field('Next allowance date (optional)', allowanceInput),
+    field('Expected allowance amount (optional)', allowanceAmtInput),
+    el('p', { class: 'txn-sub wrap', text: 'Expected money is only for planning — it never increases your available cash until you actually receive it.' }),
+    field('Emergency buffer (optional)', bufferInput),
+    el('p', { class: 'txn-sub wrap', text: 'Money always held back from your safe-to-spend amount, for surprises.' }),
+    el('button', {
+      class: 'btn btn-primary', text: 'Save',
+      onclick: () => {
+        const v = allowanceInput.value;
+        if (v !== '' && !isValidISODate(v)) {
+          toast('Please choose a valid date.', 'error');
+          return;
+        }
+        const amtRaw = allowanceAmtInput.value.trim();
+        let amt: number | undefined;
+        if (amtRaw) {
+          const p = parseAmount(amtRaw, settings.currency);
+          if (!p.ok) { toast(amountErrorMessage(p), 'error'); return; }
+          amt = p.minor;
+        }
+        const bufRaw = bufferInput.value.trim();
+        let buf: number | undefined;
+        if (bufRaw) {
+          const p = parseAmount(bufRaw, settings.currency);
+          if (!p.ok) { toast(amountErrorMessage(p), 'error'); return; }
+          buf = p.minor;
+        }
+        saveSettings({
+          nextAllowanceDate: v === '' ? undefined : v,
+          nextAllowanceAmount: amt,
+          emergencyBuffer: buf,
+        });
+        toast('Allowance settings saved.', 'success');
+      },
+    }),
+  ));
+
+  // ------------------------------------------------------------- 2c. Starting balance
+  const openingTxns = (await store.listTransactions()).filter((t) => t.type === 'opening_balance');
+  const openingTotal = openingTxns.reduce((s, t) => s + t.amount, 0);
+  const openingInput = textInput({
+    placeholder: 'e.g. 2000',
+    inputmode: 'decimal',
+    value: openingTotal > 0 ? String(openingTotal / 100) : '',
+    'aria-label': 'Starting balance',
+  });
+  view.appendChild(sectionCard('Starting balance',
+    el('p', { class: 'txn-sub', text: `Current: ${formatMoney(openingTotal, settings.currency)}` }),
+    field('Cash you had before using the app (not income)', openingInput),
+    el('button', {
+      class: 'btn btn-primary', text: 'Save',
+      onclick: async () => {
+        const raw = openingInput.value.trim();
+        if (!raw) {
+          // Clear: remove all opening balance transactions.
+          for (const t of openingTxns) await store.deleteTransaction(t.id);
+          toast('Starting balance cleared.', 'success');
+          return;
+        }
+        const p = parseAmount(raw, settings.currency);
+        if (!p.ok) { toast(amountErrorMessage(p), 'error'); return; }
+        for (const t of openingTxns) await store.deleteTransaction(t.id);
+        const categories = await store.listCategories();
+        const fallback = categories.find((c) => c.kind !== 'income') ?? categories[0];
+        const now = Date.now();
+        await store.saveTransaction({
+          id: newId(),
+          type: 'opening_balance',
+          amount: p.minor,
+          categoryId: fallback?.id ?? 'cat-other',
+          date: todayISO(),
+          note: 'Starting balance',
+          createdAt: now,
+          updatedAt: now,
+        });
+        toast('Starting balance saved.', 'success');
+      },
+    }),
+  ));
 
   // ------------------------------------------------------------- 3. Appearance
   view.appendChild(sectionCard('Appearance',
@@ -246,7 +346,7 @@ export async function renderSettings(root: HTMLElement): Promise<void> {
   // ------------------------------------------------------------- 8. About
   view.appendChild(sectionCard('About',
     el('h3', { text: 'Student Expense Tracker', style: 'margin:0 0 4px;font-size:16px;' }),
-    el('p', { text: 'Version 1.0.0', style: 'margin:0 0 8px;color:var(--text-soft);font-size:13px;' }),
+    el('p', { text: 'Version 1.5.0', style: 'margin:0 0 8px;color:var(--text-soft);font-size:13px;' }),
     el('p', {
       text: 'Offline-first student expense tracker. Built with plain logic — no AI, no accounts, no tracking.',
       style: 'margin:0;color:var(--text-soft);font-size:13.5px;line-height:1.5;',
