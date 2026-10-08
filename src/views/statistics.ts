@@ -6,11 +6,13 @@ import {
   monthEnd, monthLabel, monthStart, parseISODate, todayISO, weekEnd, weekStart,
 } from '../core/dates';
 import { filterTxns, flowsByDay, statOverview, totalsByCategory } from '../core/finance';
+import { accountingSummary } from '../core/accounting';
+import { isHistoryTxn } from '../model/types';
 import { formatMoney } from '../core/money';
 import { getSettings, store } from '../data/store';
 import { CATEGORY_COLORS } from '../model/defaults';
 import { barChart, categoryBars, donutChart, legend } from '../ui/charts';
-import { clear, el, emptyState, segmented } from '../ui/components';
+import { clear, el, emptyState, fitAmounts, segmented } from '../ui/components';
 import { icon } from '../ui/icons';
 
 type Period = 'week' | 'month' | 'year';
@@ -67,19 +69,24 @@ export async function renderStatistics(root: HTMLElement): Promise<void> {
       return;
     }
 
-    const ov = statOverview(txns, from, to);
+    const ov = statOverview(txns.filter(isHistoryTxn), from, to);
+    const acct = accountingSummary(filterTxns(txns, { from, to }));
 
-    // 1. Stat cards.
+    // 1. Stat cards — income is ONLY actual income; gifts/borrowed separated.
     const qstat = (l: string, v: string) =>
-      el('div', { class: 'qstat' }, el('div', { class: 'l', text: l }), el('div', { class: 'v', text: v }));
+      el('div', { class: 'qstat' }, el('div', { class: 'l', text: l }), el('div', { class: 'v fit-amt', text: v }));
     root.appendChild(
       el('div', { class: 'quick-stats', style: 'grid-template-columns:repeat(2,1fr)' },
         qstat('Spent', formatMoney(ov.totalExpense, currency)),
         qstat('Income', formatMoney(ov.totalIncome, currency)),
+        qstat('Gifts', formatMoney(acct.gifts, currency)),
+        qstat('Borrowed', formatMoney(acct.borrowed, currency)),
+        qstat('Debt repaid', formatMoney(acct.debtRepaid, currency)),
         qstat('Transactions', String(ov.txnCount)),
         qstat('Avg / day', formatMoney(ov.avgDailyExpense, currency)),
       ),
     );
+    fitAmounts(root);
 
     const catTotals = totalsByCategory(inPeriod, 'expense');
 

@@ -12,6 +12,14 @@ import { runRecurring } from './services/recurringRunner';
 import { applyTheme } from './ui/nav';
 import { renderOnboarding } from './views/onboarding';
 
+/** DEV-ONLY responsive-audit seed (?seed=big). Tree-shaken from prod builds. */
+async function maybeSeedAudit(): Promise<void> {
+  if (import.meta.env.DEV && location.search.includes('seed=big')) {
+    const { seedBigIfRequested } = await import('./dev/seedBig');
+    await seedBigIfRequested();
+  }
+}
+
 async function checkBudgetAlerts(): Promise<void> {
   try {
     const [txns, budgets, categories] = await Promise.all([
@@ -49,6 +57,7 @@ async function main(): Promise<void> {
   } catch (err) {
     console.error('Seeding failed', err);
   }
+  await maybeSeedAudit();
 
   const root = document.getElementById('app');
   if (!root) throw new Error('Missing #app element');

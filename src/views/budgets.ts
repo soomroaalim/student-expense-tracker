@@ -21,6 +21,7 @@ import { formatMoney, parseAmount, amountErrorMessage } from '../core/money';
 import { budgetUsage, budgetWarningText } from '../core/budgets';
 import type { Budget, BudgetPeriod, Category } from '../model/types';
 import { currencyMeta } from '../model/defaults';
+import { navigate } from '../ui/nav';
 
 type Usage = ReturnType<typeof budgetUsage>;
 
@@ -167,6 +168,7 @@ function budgetCard(
         if (ok) {
           await store.deleteBudget(budget.id);
           toast('Budget deleted', 'success');
+          navigate('budgets');
         }
       },
     }),
@@ -253,6 +255,7 @@ function budgetForm(
             toast('Budget created', 'success');
           }
           handle.close();
+          navigate('budgets');
         },
       },
     ],

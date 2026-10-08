@@ -4,6 +4,7 @@
  */
 import { dashboardStats } from '../core/finance';
 import { currencyMeta } from '../model/defaults';
+import { isHistoryTxn } from '../model/types';
 import { getSettings, store } from '../data/store';
 import { clear, el, moneyEl } from '../ui/components';
 import { icon } from '../ui/icons';
@@ -22,6 +23,7 @@ export async function renderProfile(root: HTMLElement): Promise<void> {
   const meta = currencyMeta(settings.currency);
   const name = settings.name.trim() || 'Student';
   const initial = name.charAt(0).toUpperCase();
+  const histCount = txns.filter(isHistoryTxn).length;
 
   // ---------------------------------------------------------- profile card
   const avatar = el('div', { class: 'cat-avatar avatar-lg' });
@@ -37,7 +39,7 @@ export async function renderProfile(root: HTMLElement): Promise<void> {
       el('div', {},
         el('h2', { text: name, style: 'margin:0 0 4px;font-size:19px;' }),
         el('p', {
-          text: `${meta.code} • ${txns.length} transaction${txns.length === 1 ? '' : 's'}`,
+          text: `${meta.code} • ${histCount} transaction${histCount === 1 ? '' : 's'}`,
           style: 'margin:0;color:var(--text-soft);font-size:13px;',
         }),
       ),
@@ -46,7 +48,7 @@ export async function renderProfile(root: HTMLElement): Promise<void> {
 
   // ---------------------------------------------------------- money overview
   const balanceWrap = el('div', { style: 'font-size:30px;font-weight:800;letter-spacing:-0.02em;margin:2px 0 12px;' });
-  balanceWrap.appendChild(moneyEl(stats.balance));
+  balanceWrap.appendChild(moneyEl(stats.availableCash));
 
   const row = (label: string, minor: number, cls: string): HTMLElement =>
     el('div', { class: 'row-between', style: 'padding:7px 0;' },
@@ -58,10 +60,13 @@ export async function renderProfile(root: HTMLElement): Promise<void> {
 
   view.appendChild(el('div', { class: 'card' },
     el('h3', { class: 'card-title', text: 'Overview' }),
-    el('p', { text: 'Balance', style: 'margin:0;color:var(--text-soft);font-size:12.5px;' }),
+    el('p', { text: 'Available cash', style: 'margin:0;color:var(--text-soft);font-size:12.5px;' }),
     balanceWrap,
-    row('Total income', stats.totalIncome, ''),
-    row('Total expenses', stats.totalExpense, ''),
+    row('Total income', stats.income, ''),
+    row('Gifts received', stats.gifts, ''),
+    row('Total expenses', stats.expense, ''),
+    row('Borrowed', stats.borrowed, ''),
+    row('Debt owed', stats.outstandingDebt, ''),
     row('Saved toward goals', saved, ''),
   ));
 
@@ -71,6 +76,7 @@ export async function renderProfile(root: HTMLElement): Promise<void> {
     { ic: 'coins', label: 'Savings Goals', route: 'goals' },
     { ic: 'repeat', label: 'Recurring Expenses', route: 'recurring' },
     { ic: 'other', label: 'Categories', route: 'categories' },
+    { ic: 'alert', label: 'Debt', route: 'debt' },
     { ic: 'settings', label: 'Settings', route: 'settings' },
   ];
   const menuCard = el('div', { class: 'card' });

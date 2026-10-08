@@ -3,19 +3,23 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#00000000"
-        android:pathData="M34.59,37.13H73.41A7.59,7.59 0 0 1 81,44.72V66.66A7.59,7.59 0 0 1 73.41,74.25H34.59A7.59,7.59 0 0 1 27,66.66V44.72A7.59,7.59 0 0 1 34.59,37.13Z"
-        android:strokeColor="#FFFFFF"
-        android:strokeLineCap="round"
-        android:strokeWidth="7.17" />
-    <path
-        android:fillColor="#00000000"
-        android:pathData="M37.13,37.13V28.69A5.06,5.06 0 0 1 42.19,23.63H65.81A5.06,5.06 0 0 1 70.88,28.69V37.13"
-        android:strokeColor="#FFFFFF"
-        android:strokeLineCap="round"
-        android:strokeWidth="7.17" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M70.88,52.31a3.38,3.38 0 1 0 0.01,0Z" />
+    <!-- v1.5 logo: ascending bars, tallest grows an arrowhead. Scaled into the 72dp safe zone. -->
+    <group
+        android:translateX="18"
+        android:translateY="18"
+        android:scaleX="0.140625"
+        android:scaleY="0.140625">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M126,304 L156,304 A22,22 0 0 1 178,326 L178,406 A22,22 0 0 1 156,428 L126,428 A22,22 0 0 1 104,406 L104,326 A22,22 0 0 1 126,304 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M240,224 L272,224 A22,22 0 0 1 294,246 L294,406 A22,22 0 0 1 272,428 L240,428 A22,22 0 0 1 218,406 L218,246 A22,22 0 0 1 240,224 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M354,188 L386,188 A22,22 0 0 1 408,210 L408,406 A22,22 0 0 1 386,428 L354,428 A22,22 0 0 1 332,406 L332,210 A22,22 0 0 1 354,188 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M332,190 L408,190 L370,104 Z" />
+    </group>
 </vector>
