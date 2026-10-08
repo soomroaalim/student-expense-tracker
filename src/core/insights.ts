@@ -6,8 +6,9 @@
  */
 import type { Budget, SavingsGoal, Transaction } from '../model/types';
 import { addDays, monthEnd, monthStart, todayISO, weekEnd, weekStart } from './dates';
-import { filterTxns, summarize, totalsByCategory } from './finance';
+import { allowanceInfo, filterTxns, summarize, totalsByCategory } from './finance';
 import { budgetUsage } from './budgets';
+import { formatMoney } from './money';
 
 export type InsightLevel = 'tip' | 'warning' | 'praise';
 
@@ -23,6 +24,14 @@ export interface InsightInput {
   goals: SavingsGoal[];
   categoryName: (id: string) => string;
   now?: Date;
+  /** Current balance in minor units (for allowance pacing). */
+  balance?: number;
+  /** Outstanding debt in minor units (for debt insight). */
+  outstandingDebt?: number;
+  /** ISO currency code for formatting. */
+  currency?: string;
+  /** Next allowance ISO date (optional). */
+  nextAllowanceDate?: string;
 }
 
 /** Evaluate all rules and return the insights worth showing (newest context first). */
@@ -120,7 +129,42 @@ export function buildInsights(input: InsightInput): Insight[] {
     }
   }
 
-  return insights.slice(0, 5);
+  // Rule 7: allowance pacing — safe daily spending until next allowance.
+  if (input.balance !== undefined && input.nextAllowanceDate) {
+    const info = allowanceInfo(input.balance, input.nextAllowanceDate, today);
+    if (info) {
+      const cur = input.currency ?? 'PKR';
+      insights.push({
+        level: 'tip',
+        icon: 'calendar',
+        text: `${info.daysLeft} day${info.daysLeft === 1 ? '' : 's'} until your allowance — about ${formatMoney(info.dailyAmount, cur)} per day is safe.`,
+      });
+    }
+  }
+
+  // Rule 8: spending up sharply vs last week (percentage).
+  if (lastWeek > 0 && thisWeek > lastWeek) {
+    const pct = Math.round(((thisWeek - lastWeek) / lastWeek) * 100);
+    if (pct >= 25) {
+      insights.push({
+        level: 'tip',
+        icon: 'trend-up',
+        text: `You've spent ${pct}% more than last week.`,
+      });
+    }
+  }
+
+  // Rule 9: outstanding debt reminder.
+  if (input.outstandingDebt !== undefined && input.outstandingDebt > 0) {
+    const cur = input.currency ?? 'PKR';
+    insights.push({
+      level: 'warning',
+      icon: 'alert',
+      text: `You owe ${formatMoney(input.outstandingDebt, cur)}. Repay from the Debt section when you can.`,
+    });
+  }
+
+  return insights.slice(0, 6);
 }
 
 /** Compact money text for insights without needing a currency import cycle. */

@@ -62,10 +62,20 @@ function parseCSVLine(line: string): string[] | null {
   return out;
 }
 
+const TXN_TYPES: TxnType[] = ['expense', 'income', 'opening_balance', 'gift_received', 'borrowed', 'debt_repayment'];
+
 function newId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function fallbackCategoryFor(type: TxnType, categories: Category[]): Category | undefined {
+  const fallbackExpense = categories.find((c) => c.kind === 'expense' && c.name.toLowerCase() === 'other')
+    ?? categories.find((c) => c.kind !== 'income');
+  const fallbackIncome = categories.find((c) => c.kind === 'income' && c.name.toLowerCase().includes('other'))
+    ?? categories.find((c) => c.kind !== 'expense');
+  return type === 'income' ? fallbackIncome : fallbackExpense;
 }
 
 /**
@@ -90,10 +100,6 @@ export function transactionsFromCSV(
   const rows = hasHeader ? lines.slice(1) : lines;
 
   const byName = new Map(categories.map((c) => [c.name.toLowerCase(), c]));
-  const fallbackExpense = categories.find((c) => c.kind === 'expense' && c.name.toLowerCase() === 'other')
-    ?? categories.find((c) => c.kind !== 'income');
-  const fallbackIncome = categories.find((c) => c.kind === 'income' && c.name.toLowerCase().includes('other'))
-    ?? categories.find((c) => c.kind !== 'expense');
 
   rows.forEach((line, idx) => {
     const cols = parseCSVLine(line);
@@ -101,12 +107,11 @@ export function transactionsFromCSV(
     if (!cols || cols.length < 4) { skipped++; errors.push(`Row ${rowNo}: not enough columns.`); return; }
     const [dateRaw, typeRaw, catRaw, amountRaw, noteRaw = '', pmRaw = ''] = cols.map((c) => c.trim());
     const type = typeRaw.toLowerCase() as TxnType;
-    if (type !== 'expense' && type !== 'income') { skipped++; errors.push(`Row ${rowNo}: type must be expense or income.`); return; }
+    if (!TXN_TYPES.includes(type)) { skipped++; errors.push(`Row ${rowNo}: type must be one of ${TXN_TYPES.join(', ')}.`); return; }
     if (!isValidISODate(dateRaw)) { skipped++; errors.push(`Row ${rowNo}: invalid date "${dateRaw}".`); return; }
     const parsed = parseAmount(amountRaw, currencyCode);
     if (!parsed.ok) { skipped++; errors.push(`Row ${rowNo}: invalid amount "${amountRaw}".`); return; }
-    const cat = byName.get(catRaw.toLowerCase())
-      ?? (type === 'income' ? fallbackIncome : fallbackExpense);
+    const cat = byName.get(catRaw.toLowerCase()) ?? fallbackCategoryFor(type, categories);
     if (!cat) { skipped++; errors.push(`Row ${rowNo}: no matching category and no fallback available.`); return; }
     transactions.push({
       id: newId(),
@@ -132,7 +137,7 @@ export function toBackupJSON(data: BackupData): string {
 function isTxnLike(t: unknown): t is Transaction {
   const o = t as Record<string, unknown>;
   return !!o && typeof o.id === 'string'
-    && (o.type === 'expense' || o.type === 'income')
+    && TXN_TYPES.includes(o.type as TxnType)
     && Number.isSafeInteger(o.amount) && (o.amount as number) > 0 && (o.amount as number) <= MAX_MINOR
     && typeof o.categoryId === 'string' && typeof o.date === 'string' && isValidISODate(o.date as string);
 }

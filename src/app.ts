@@ -4,9 +4,10 @@
  */
 import { getSettings, subscribe } from './data/store';
 import { currentRoute, navigate, refreshTheme, type Route } from './ui/nav';
+import { initBackButton } from './services/backButton';
 import { clear, el } from './ui/components';
 import { icon } from './ui/icons';
-import { openAddSheet } from './views/add';
+import { openQuickAdd } from './views/add';
 
 import { renderDashboard } from './views/dashboard';
 import { renderTransactions } from './views/transactions';
@@ -17,6 +18,11 @@ import { renderGoals } from './views/goals';
 import { renderRecurring } from './views/recurring';
 import { renderSettings } from './views/settings';
 import { renderCategories } from './views/categories';
+import { renderDebt } from './views/debt';
+import {
+  renderCalculatorScreen, renderGameRoute, renderGamesScreen,
+  renderMoneyToolsScreen, renderToolsHub,
+} from './views/tools';
 
 type ViewFn = (root: HTMLElement) => void | Promise<void>;
 
@@ -30,14 +36,31 @@ const VIEWS: Record<Route, { title: string; sub: string; render: ViewFn }> = {
   recurring: { title: 'Recurring', sub: 'Automatic expenses', render: renderRecurring },
   settings: { title: 'Settings', sub: 'Make it yours', render: renderSettings },
   categories: { title: 'Categories', sub: 'Organize your spending', render: renderCategories },
+  debt: { title: 'Debt', sub: 'Borrowed money & repayments', render: renderDebt },
+  tools: { title: 'Tools', sub: 'Calculator & mini games', render: renderToolsHub },
+  calculator: { title: 'Calculator', sub: 'Quick everyday calculations', render: renderCalculatorScreen },
+  'money-tools': { title: 'Money Calculators', sub: 'Discount · Split Bill · Savings · Tip', render: renderMoneyToolsScreen },
+  games: { title: 'Mini Games', sub: 'Quick money & math games', render: renderGamesScreen },
+  'game-quiz': { title: 'Money Quiz', sub: 'Everyday money decisions', render: (r) => renderGameRoute(r, 'quiz') },
+  'game-budget': { title: 'Budget Challenge', sub: 'Fictional money only', render: (r) => renderGameRoute(r, 'budget') },
+  'game-math': { title: 'Quick Math', sub: 'No timer, no pressure', render: (r) => renderGameRoute(r, 'math') },
+  'game-saving': { title: 'Saving Challenge', sub: 'Fictional money only', render: (r) => renderGameRoute(r, 'saving') },
 };
 
 const NAV_ITEMS: Array<{ route: Route; label: string; icon: string }> = [
   { route: 'home', label: 'Home', icon: 'home' },
-  { route: 'transactions', label: 'History', icon: 'receipt' },
-  { route: 'stats', label: 'Stats', icon: 'chart' },
+  { route: 'transactions', label: 'Transactions', icon: 'receipt' },
+  { route: 'stats', label: 'Statistics', icon: 'chart' },
+  { route: 'tools', label: 'Tools', icon: 'tools' },
   { route: 'profile', label: 'Profile', icon: 'user' },
 ];
+
+/** Which bottom-nav item to highlight for a given route (tool sub-screens -> Tools). */
+function navHighlight(route: Route): Route {
+  return (route === 'calculator' || route === 'money-tools' || route === 'games' ||
+    route === 'game-quiz' || route === 'game-budget' || route === 'game-math' ||
+    route === 'game-saving') ? 'tools' : route;
+}
 
 let root: HTMLElement;
 let viewContainer: HTMLElement;
@@ -56,7 +79,7 @@ function renderHeader(route: Route): void {
   clear(headerEl);
   const name = getSettings().name;
   const title = route === 'home' && name ? `${greeting()}, ${name}` : VIEWS[route].title;
-  const sub = route === 'home' && name ? 'Here’s your money at a glance' : VIEWS[route].sub;
+  const sub = route === 'home' && name ? 'Know what you can spend today.' : VIEWS[route].sub;
   headerEl.append(
     el('div', {}, el('h1', { text: title }), el('p', { class: 'sub', text: sub })),
   );
@@ -64,19 +87,20 @@ function renderHeader(route: Route): void {
 
 function renderNav(route: Route): void {
   clear(navEl);
-  // Home, History | ADD | Stats, Profile
-  const left = NAV_ITEMS.slice(0, 2);
-  const right = NAV_ITEMS.slice(2);
-  for (const item of left) navEl.appendChild(navButton(item, route));
-  const addWrap = el('div', { class: 'nav-add' });
-  addWrap.appendChild(el('button', {
-    class: 'fab',
-    'aria-label': 'Add transaction',
-    html: icon('plus'),
-    onclick: () => openAddSheet('expense'),
-  }));
-  navEl.appendChild(addWrap);
-  for (const item of right) navEl.appendChild(navButton(item, route));
+  const active = navHighlight(route);
+  for (const item of NAV_ITEMS) navEl.appendChild(navButton(item, active));
+  // Floating quick-add button (above the nav, bottom-right).
+  let fab = document.getElementById('fab') as HTMLButtonElement | null;
+  if (!fab) {
+    fab = el('button', {
+      id: 'fab',
+      class: 'fab',
+      'aria-label': 'Quick add expense',
+      html: icon('plus'),
+      onclick: () => openQuickAdd(),
+    }) as HTMLButtonElement;
+    document.body.appendChild(fab);
+  }
 }
 
 function navButton(item: { route: Route; label: string; icon: string }, route: Route): HTMLElement {
@@ -111,6 +135,7 @@ async function render(): Promise<void> {
 /** Start the main app shell (called after onboarding). */
 export function bootApp(): void {
   refreshTheme();
+  initBackButton();
 
   if (booted) {
     void render();
