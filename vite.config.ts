@@ -3,6 +3,20 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   base: './',
+  build: {
+    rollupOptions: {
+      output: {
+        // Keep chunks small for reliable deployment.
+        manualChunks(id: string) {
+          if (id.includes('src/views/tools') || id.includes('src/core/games')
+            || id.includes('src/core/calc') || id.includes('src/core/moneyTools')) {
+            return 'tools';
+          }
+          return undefined;
+        },
+      },
+    },
+  },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
