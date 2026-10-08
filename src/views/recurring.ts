@@ -24,6 +24,7 @@ import { frequencyLabel } from '../core/recurring';
 import { todayISO, friendlyDate, isValidISODate } from '../core/dates';
 import type { Category, Recurrence, RecurringExpense } from '../model/types';
 import { PAYMENT_METHODS, currencyMeta } from '../model/defaults';
+import { navigate } from '../ui/nav';
 
 const EXPENSE_KINDS = new Set(['expense', 'both']);
 
@@ -152,6 +153,7 @@ function ruleCard(
           if (ok) {
             await store.deleteRecurring(rule.id);
             toast('Recurring expense deleted', 'success');
+            navigate('recurring');
           }
         },
       }),
@@ -277,6 +279,7 @@ function recurringForm(
             toast('Recurring expense added', 'success');
           }
           handle.close();
+          navigate('recurring');
         },
       },
     ],

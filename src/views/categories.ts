@@ -9,6 +9,7 @@ import {
   segmented, textInput, toast,
 } from '../ui/components';
 import { icon } from '../ui/icons';
+import { navigate } from '../ui/nav';
 
 /** Icons users may pick for a category — all keys exist in ui/icons.ts. */
 const ICON_CHOICES = [
@@ -90,6 +91,7 @@ export async function renderCategories(root: HTMLElement): Promise<void> {
               if (!ok) return;
               await store.deleteCategory(c.id);
               toast('Category deleted.', 'success');
+              navigate('categories');
             },
           }),
         );
@@ -133,6 +135,24 @@ export async function renderCategories(root: HTMLElement): Promise<void> {
     }
 
     const body = el('div', {}, field('Name', nameInput), field('Icon', grid));
+    // Essential flag (only meaningful for expense categories): essentials
+    // never break a no-spend streak and are never framed negatively.
+    let essential = cat?.essential ?? false;
+    if (kind === 'expense') {
+      const toggle = el('button', {
+        type: 'button',
+        class: `type-pick${essential ? ' active' : ''}`,
+        'aria-pressed': String(essential),
+        text: essential ? '✓ Essential (must-pay)' : 'Essential (must-pay)',
+        onclick: () => {
+          essential = !essential;
+          toggle.classList.toggle('active', essential);
+          toggle.setAttribute('aria-pressed', String(essential));
+          toggle.textContent = essential ? '✓ Essential (must-pay)' : 'Essential (must-pay)';
+        },
+      });
+      body.append(field('Type', toggle));
+    }
 
     const handle = openModal({
       title: cat ? 'Edit category' : 'Add category',
@@ -149,7 +169,7 @@ export async function renderCategories(root: HTMLElement): Promise<void> {
               return;
             }
             if (cat) {
-              await store.saveCategory({ ...cat, name, icon: chosenIcon });
+              await store.saveCategory({ ...cat, name, icon: chosenIcon, essential: kind === 'expense' ? essential : undefined });
               toast('Category updated.', 'success');
             } else {
               await store.saveCategory({
@@ -158,11 +178,13 @@ export async function renderCategories(root: HTMLElement): Promise<void> {
                 icon: chosenIcon,
                 kind,
                 isDefault: false,
+                essential: kind === 'expense' ? essential : undefined,
                 createdAt: Date.now(),
               });
               toast('Category added.', 'success');
             }
             handle.close();
+            navigate('categories');
           },
         },
       ],

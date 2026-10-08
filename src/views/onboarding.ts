@@ -9,18 +9,18 @@ import { CURRENCIES, DEFAULT_CURRENCY } from '../model/defaults';
 import type { Budget, SavingsGoal, Transaction } from '../model/types';
 import { getSettings, newId, saveSettings, store } from '../data/store';
 import { clear, el, field, selectInput, textInput, toast } from '../ui/components';
-import { icon } from '../ui/icons';
 
 interface Draft {
   name: string;
-  allowanceMinor?: number;
+  startingMinor?: number;
+  incomeMinor?: number;
   currency: string;
   budgetMinor?: number;
   goalName?: string;
   goalTargetMinor?: number;
 }
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 export function renderOnboarding(root: HTMLElement, onDone: () => void | Promise<void>): void {
   clear(root);
@@ -35,7 +35,7 @@ export function renderOnboarding(root: HTMLElement, onDone: () => void | Promise
     if (step === 0) {
       wrap.append(
         el('div', { class: 'onboard-hero' },
-          el('div', { class: 'onboard-logo', html: icon('wallet') }),
+          el('img', { class: 'onboard-logo-img', src: 'icons/icon.svg', alt: 'Expense Tracker logo' }),
           el('h1', { text: 'Track every rupee' }),
           el('p', { class: 'lede', text: 'A simple expense tracker made for students. No account, no internet needed — your data stays on your device.' }),
         ),
@@ -73,27 +73,6 @@ export function renderOnboarding(root: HTMLElement, onDone: () => void | Promise
       }));
     } else if (step === 2) {
       card.append(
-        el('h2', { text: 'Monthly allowance' }),
-        el('p', { class: 'lede', text: 'How much pocket money do you get per month? We’ll add it as income.' }),
-        field('Amount (optional)', textInput({ placeholder: 'e.g. 10000', inputmode: 'decimal', value: draft.allowanceMinor ? String(draft.allowanceMinor / 100) : '' })),
-      );
-      const input = card.querySelector('input')!;
-      const err = el('span', { class: 'field-error' });
-      card.appendChild(err);
-      const skip = el('button', { class: 'btn btn-ghost', text: 'Skip', onclick: () => { draft.allowanceMinor = undefined; step++; render(); } });
-      nav.append(skip, el('button', {
-        class: 'btn btn-primary', text: 'Continue',
-        onclick: () => {
-          const raw = input.value.trim();
-          if (!raw) { draft.allowanceMinor = undefined; step++; render(); return; }
-          const p = parseAmount(raw, draft.currency);
-          if (!p.ok) { err.textContent = amountErrorMessage(p); return; }
-          draft.allowanceMinor = p.minor;
-          step++; render();
-        },
-      }));
-    } else if (step === 3) {
-      card.append(
         el('h2', { text: 'Preferred currency' }),
         el('p', { class: 'lede', text: 'You can change this later in Settings.' }),
         field('Currency', selectInput(
@@ -106,7 +85,53 @@ export function renderOnboarding(root: HTMLElement, onDone: () => void | Promise
         class: 'btn btn-primary', text: 'Continue',
         onclick: () => { draft.currency = sel.value; step++; render(); },
       }));
+    } else if (step === 3) {
+      card.append(
+        el('h2', { text: 'How much money do you have right now?' }),
+        el('p', { class: 'lede', text: 'This is the money you currently have when you start using the app. It becomes your opening balance — not income.' }),
+        field('Amount (optional)', textInput({ placeholder: 'e.g. 5000', inputmode: 'decimal' })),
+      );
+      const input = card.querySelector('input')!;
+      const err = el('span', { class: 'field-error' });
+      card.appendChild(err);
+      nav.append(
+        el('button', { class: 'btn btn-ghost', text: 'Skip', onclick: () => { draft.startingMinor = undefined; step++; render(); } }),
+        el('button', {
+          class: 'btn btn-primary', text: 'Continue',
+          onclick: () => {
+            const raw = input.value.trim();
+            if (!raw) { draft.startingMinor = undefined; step++; render(); return; }
+            const p = parseAmount(raw, draft.currency);
+            if (!p.ok) { err.textContent = amountErrorMessage(p); return; }
+            draft.startingMinor = p.minor;
+            step++; render();
+          },
+        }),
+      );
     } else if (step === 4) {
+      card.append(
+        el('h2', { text: 'Any income already received?' }),
+        el('p', { class: 'lede', text: 'Only record money you have actually received (salary, freelancing, allowance). Future or expected money should not be added — it does not increase your available cash.' }),
+        field('Amount (optional)', textInput({ placeholder: 'e.g. 10000', inputmode: 'decimal' })),
+      );
+      const input = card.querySelector('input')!;
+      const err = el('span', { class: 'field-error' });
+      card.appendChild(err);
+      nav.append(
+        el('button', { class: 'btn btn-ghost', text: 'Skip', onclick: () => { draft.incomeMinor = undefined; step++; render(); } }),
+        el('button', {
+          class: 'btn btn-primary', text: 'Continue',
+          onclick: () => {
+            const raw = input.value.trim();
+            if (!raw) { draft.incomeMinor = undefined; step++; render(); return; }
+            const p = parseAmount(raw, draft.currency);
+            if (!p.ok) { err.textContent = amountErrorMessage(p); return; }
+            draft.incomeMinor = p.minor;
+            step++; render();
+          },
+        }),
+      );
+    } else if (step === 5) {
       card.append(
         el('h2', { text: 'Set a monthly budget' }),
         el('p', { class: 'lede', text: 'A spending target helps your money last the month. Optional.' }),
@@ -176,18 +201,33 @@ export function renderOnboarding(root: HTMLElement, onDone: () => void | Promise
         theme: settings.theme,
       });
 
-      if (draft.allowanceMinor) {
+      if (draft.incomeMinor) {
         const txn: Transaction = {
           id: newId(),
           type: 'income',
-          amount: draft.allowanceMinor,
+          amount: draft.incomeMinor,
           categoryId: 'cat-pocket',
           date: todayISO(),
-          note: 'Monthly allowance',
+          note: 'Income received',
           createdAt: now,
           updatedAt: now,
         };
         await store.saveTransaction(txn);
+      }
+      if (draft.startingMinor) {
+        const categories = await store.listCategories();
+        const fallback = categories.find((c) => c.kind !== 'income') ?? categories[0];
+        const opening: Transaction = {
+          id: newId(),
+          type: 'opening_balance',
+          amount: draft.startingMinor,
+          categoryId: fallback?.id ?? 'cat-other',
+          date: todayISO(),
+          note: 'Starting balance',
+          createdAt: now,
+          updatedAt: now,
+        };
+        await store.saveTransaction(opening);
       }
       if (draft.budgetMinor) {
         const b: Budget = {

@@ -19,6 +19,7 @@ import { formatMoney, parseAmount, amountErrorMessage } from '../core/money';
 import { friendlyDate, isValidISODate } from '../core/dates';
 import type { SavingsGoal } from '../model/types';
 import { currencyMeta } from '../model/defaults';
+import { navigate } from '../ui/nav';
 
 function majorStr(minor: number, currency: string): string {
   const meta = currencyMeta(currency);
@@ -120,6 +121,7 @@ function goalCard(goal: SavingsGoal, currency: string, onEdit: () => void): HTML
         if (ok) {
           await store.deleteGoal(goal.id);
           toast('Goal deleted', 'success');
+          navigate('goals');
         }
       },
     }),
@@ -151,6 +153,7 @@ function addMoneyForm(goal: SavingsGoal, currency: string): void {
           await store.saveGoal({ ...goal, currentAmount });
           toast('Saved to goal', 'success');
           handle.close();
+          navigate('goals');
         },
       },
     ],
@@ -173,6 +176,18 @@ function goalForm(existing: SavingsGoal | undefined, currency: string): void {
   }) as HTMLInputElement;
 
   const body = el('div', { class: 'form-stack' });
+  // Student-friendly goal templates (just fill the name field).
+  if (!existing) {
+    const templates = ['New headphones', 'Trip', 'New phone', 'Emergency money', 'Course', 'Gaming setup'];
+    const tplRow = el('div', { class: 'type-group-row', style: 'margin-bottom:4px' });
+    for (const t of templates) {
+      tplRow.appendChild(el('button', {
+        type: 'button', class: 'type-pick', text: t,
+        onclick: () => { nameInput.value = t; nameInput.focus(); },
+      }));
+    }
+    body.append(el('div', { class: 'type-group-label', text: 'Ideas' }), tplRow);
+  }
   body.append(
     field('Goal name', nameInput),
     field('Target amount', targetInput),
@@ -225,6 +240,7 @@ function goalForm(existing: SavingsGoal | undefined, currency: string): void {
             toast('Goal created', 'success');
           }
           handle.close();
+          navigate('goals');
         },
       },
     ],
